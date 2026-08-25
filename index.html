@@ -87,12 +87,48 @@
     .list-container {
       padding: 0 0 40px 0;
     }
+    
+    /* アコーディオン・日付ヘッダー関連 */
     .date-header {
+      display: flex;
+      align-items: center;
       padding: 12px 16px 6px 16px;
       font-size: 0.9rem;
       font-weight: bold;
       color: var(--text-sub);
     }
+    .header-title-area {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      cursor: pointer;
+    }
+    .accordion-icon {
+      margin-right: 8px;
+      font-size: 0.75rem;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+    .accordion-icon.collapsed {
+      transform: rotate(-90deg); /* ▼を▶にする */
+    }
+
+    /* 選択モード用チェックボックス */
+    .checkbox-container {
+      width: 32px;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .checkbox-container input {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      pointer-events: none; /* クリック判定は親要素に任せる */
+    }
+
     .record-item {
       display: flex;
       align-items: center;
@@ -154,8 +190,6 @@
       align-items: center;
       margin-bottom: 16px;
     }
-    
-    /* 詳細画面の色選択用 */
     .color-select-container {
       display: flex;
       gap: 16px;
@@ -169,7 +203,6 @@
       cursor: pointer;
       box-sizing: border-box;
     }
-    
     .start-checkbox-container {
       margin-bottom: 16px;
       font-size: 1rem;
@@ -177,7 +210,6 @@
       align-items: center;
       gap: 8px;
     }
-
     textarea {
       width: 100%;
       height: 100px;
@@ -188,8 +220,6 @@
       font-size: 1rem;
       resize: none;
     }
-
-    /* 出力画面のテキストエリア（文字を小さく・一覧性向上） */
     #exportArea {
       height: 350px;
       font-family: monospace;
@@ -212,9 +242,19 @@
     </div>
   </header>
 
-  <div class="toolbar">
-    <button class="tool-btn" onclick="openExportModal()">出力</button>
-    <button class="tool-btn" style="color:#ff3b30;" onclick="clearAllRecords()">全削除</button>
+  <!-- 通常時のツールバー -->
+  <div class="toolbar" id="normalTools">
+    <button class="tool-btn" onclick="toggleSelectMode()">選択</button>
+    <div>
+      <button class="tool-btn" style="margin-right: 16px;" onclick="openExportModal()">出力</button>
+      <button class="tool-btn" style="color:#ff3b30;" onclick="clearAllRecords()">全削除</button>
+    </div>
+  </div>
+
+  <!-- 選択モード時のツールバー -->
+  <div class="toolbar" id="selectTools" style="display: none; background-color: #f2f2f7;">
+    <button class="tool-btn" onclick="toggleSelectMode()">キャンセル</button>
+    <button class="tool-btn" style="color:#ff3b30; font-weight:bold;" id="deleteSelectedBtn" onclick="deleteSelected()">削除 (0)</button>
   </div>
 
   <div class="list-container" id="listContainer"></div>
@@ -228,7 +268,6 @@
       </div>
       <p id="modalTimeText" style="color:var(--text-sub); margin-top:0; margin-bottom:8px;"></p>
       
-      <!-- 事後色変更 -->
       <div class="color-select-container">
         <div class="color-select-btn btn-red" id="mc-red" onclick="selectModalColor('red')"></div>
         <div class="color-select-btn btn-orange" id="mc-orange" onclick="selectModalColor('orange')"></div>
@@ -236,7 +275,6 @@
         <div class="color-select-btn btn-gray" id="mc-gray" onclick="selectModalColor('gray')"></div>
       </div>
 
-      <!-- 開始基準フラグ -->
       <label class="start-checkbox-container">
         <input type="checkbox" id="isStartCheckbox" style="width:18px; height:18px;">
         この打刻を開始基準にする
@@ -265,10 +303,14 @@
   </div>
 
   <script>
-    // データの読み込み
     let records = JSON.parse(localStorage.getItem('tokimemo_records') || '[]');
     let currentEditingId = null;
     let tempSelectedColor = '';
+    
+    // 追加: 状態管理用変数
+    let collapsedDays = new Set(); // 折り畳まれている日付キーを保存
+    let isSelectMode = false;      // 選択モード中かどうか
+    let selectedIds = new Set();   // 選択されているレコードIDを保存
 
     // 時計の更新
     function updateClock() {
@@ -281,15 +323,12 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 記録の保存
     function saveToStorage() {
       localStorage.setItem('tokimemo_records', JSON.stringify(records));
       renderList();
     }
 
-    // スタンプ追加
     function addRecord(color) {
-      // 最初の1件目であれば自動的に「開始基準」にする
       const isFirst = records.length === 0;
       const newRec = {
         id: Date.now().toString(),
@@ -302,7 +341,73 @@
       saveToStorage();
     }
 
-    // リスト描画
+    // --- 追加: アコーディオン・選択モードのロジック ---
+    function toggleAccordion(dayKey) {
+      if (collapsedDays.has(dayKey)) {
+        collapsedDays.delete(dayKey);
+      } else {
+        collapsedDays.add(dayKey);
+      }
+      renderList();
+    }
+
+    function toggleSelectMode() {
+      isSelectMode = !isSelectMode;
+      selectedIds.clear(); // モード切替時に選択をリセット
+      updateToolbar();
+      renderList();
+    }
+
+    function updateToolbar() {
+      const normalTools = document.getElementById('normalTools');
+      const selectTools = document.getElementById('selectTools');
+      if (isSelectMode) {
+        normalTools.style.display = 'none';
+        selectTools.style.display = 'flex';
+        document.getElementById('deleteSelectedBtn').textContent = `削除 (${selectedIds.size})`;
+      } else {
+        normalTools.style.display = 'flex';
+        selectTools.style.display = 'none';
+      }
+    }
+
+    function toggleSelection(id) {
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+      } else {
+        selectedIds.add(id);
+      }
+      updateToolbar();
+      renderList();
+    }
+
+    function toggleDaySelection(dayKey, items) {
+      // その日の記録がすべて選択されているか確認
+      const allSelected = items.every(i => selectedIds.has(i.rec.id));
+      if (allSelected) {
+        // すべて選択済みなら、すべて解除
+        items.forEach(i => selectedIds.delete(i.rec.id));
+      } else {
+        // そうでなければ、すべて選択
+        items.forEach(i => selectedIds.add(i.rec.id));
+      }
+      updateToolbar();
+      renderList();
+    }
+
+    function deleteSelected() {
+      if (selectedIds.size === 0) return;
+      if (confirm(`${selectedIds.size}件の記録を削除しますか？\nこの操作は元に戻せません。`)) {
+        records = records.filter(r => !selectedIds.has(r.id));
+        selectedIds.clear();
+        isSelectMode = false;
+        updateToolbar();
+        saveToStorage();
+      }
+    }
+    // ---------------------------------------------
+
+    // リスト描画（改修）
     function renderList() {
       const container = document.getElementById('listContainer');
       container.innerHTML = '';
@@ -320,13 +425,67 @@
       for (const [dayKey, items] of Object.entries(grouped)) {
         const header = document.createElement('div');
         header.className = 'date-header';
-        header.textContent = dayKey;
+
+        // 選択モード中のみ、ヘッダー左側に一括選択チェックボックスを表示
+        if (isSelectMode) {
+          const cbContainer = document.createElement('div');
+          cbContainer.className = 'checkbox-container';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          // 全て選択されているかチェック
+          cb.checked = items.every(i => selectedIds.has(i.rec.id));
+          cb.style.pointerEvents = 'none';
+          
+          cbContainer.onclick = (e) => {
+            e.stopPropagation();
+            toggleDaySelection(dayKey, items);
+          };
+          cbContainer.appendChild(cb);
+          header.appendChild(cbContainer);
+        }
+
+        // アコーディオン操作用のテキスト領域
+        const headerTitleArea = document.createElement('div');
+        headerTitleArea.className = 'header-title-area';
+        headerTitleArea.onclick = () => toggleAccordion(dayKey);
+        
+        const icon = document.createElement('span');
+        icon.className = 'accordion-icon ' + (collapsedDays.has(dayKey) ? 'collapsed' : '');
+        icon.textContent = '▼';
+        
+        const titleText = document.createElement('span');
+        titleText.textContent = dayKey;
+        
+        headerTitleArea.appendChild(icon);
+        headerTitleArea.appendChild(titleText);
+        header.appendChild(headerTitleArea);
+
         container.appendChild(header);
+
+        // --- 折り畳み状態なら中身（アイテム）を描画せずにスキップ ---
+        if (collapsedDays.has(dayKey)) {
+          continue;
+        }
 
         items.forEach(({ rec, globalIdx }) => {
           const itemEl = document.createElement('div');
           itemEl.className = 'record-item';
-          itemEl.onclick = () => openDetailModal(rec.id);
+
+          // モードによってタップ時の動作を変更
+          if (isSelectMode) {
+            itemEl.onclick = () => toggleSelection(rec.id);
+            
+            const cbContainer = document.createElement('div');
+            cbContainer.className = 'checkbox-container';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = selectedIds.has(rec.id);
+            cb.style.pointerEvents = 'none';
+            cbContainer.appendChild(cb);
+            itemEl.appendChild(cbContainer);
+          } else {
+            itemEl.onclick = () => openDetailModal(rec.id);
+          }
 
           const dot = document.createElement('div');
           dot.className = `record-dot btn-${rec.color}`;
@@ -343,20 +502,16 @@
           const elapsedEl = document.createElement('div');
           elapsedEl.className = 'record-elapsed';
           
-          // --- 経過時間の計算ロジック（開始基準から） ---
           let startRecord = null;
           if (rec.isStart) {
-            // 自身が開始基準の場合
             elapsedEl.textContent = '開始';
           } else {
-            // 自分より古い記録の中から直近の「開始基準」を探す
             for (let i = globalIdx + 1; i < records.length; i++) {
               if (records[i].isStart) {
                 startRecord = records[i];
                 break;
               }
             }
-            // 明示的な開始基準がない場合は、一番古い記録（配列の末尾）を開始基準とみなす
             if (!startRecord && records.length > 0) {
               startRecord = records[records.length - 1];
             }
@@ -381,7 +536,7 @@
       }
     }
 
-    // 詳細モーダル操作
+    // --- その他既存機能（詳細モーダル、出力など） ---
     function openDetailModal(id) {
       currentEditingId = id;
       const rec = records.find(r => r.id === id);
@@ -392,9 +547,7 @@
       document.getElementById('memoInput').value = rec.memo || '';
       document.getElementById('isStartCheckbox').checked = !!rec.isStart;
       
-      // 色の初期選択
       selectModalColor(rec.color);
-      
       document.getElementById('detailModal').style.display = 'flex';
     }
 
@@ -433,13 +586,12 @@
     }
 
     function clearAllRecords() {
-      if (confirm('すべての記録を削除しますか？この操作は元に戻せません。')) {
+      if (confirm('すべての記録を削除しますか？\nこの操作は元に戻せません。')) {
         records = [];
         saveToStorage();
       }
     }
 
-    // 出力モーダル操作
     function openExportModal() {
       const days = ['日', '月', '火', '水', '木', '金', '土'];
       const colorMap = { red: 'R', orange: 'O', green: 'G', gray: 'N' };
@@ -453,7 +605,6 @@
         const time = d.toTimeString().split(' ')[0];
         const c = colorMap[r.color] || '-';
         
-        // 改行やMemoを削除し、半角スペースで連結
         text += `[${y}/${m}/${date}(${day}) ${time}](${c})`;
         if (r.memo) {
           text += ` ${r.memo}`;
