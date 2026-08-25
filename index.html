@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>時めも</title>
+  <title>TimeColourStamp</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="時めも">
+  <meta name="apple-mobile-web-app-title" content="TimeColourStamp">
   <style>
     :root {
       --bg-color: #f2f2f7;
@@ -303,7 +303,7 @@
   </div>
 
   <script>
-    let records = JSON.parse(localStorage.getItem('tokimemo_records') || '[]');
+    let records = JSON.parse(localStorage.getItem('TCS_records') || '[]');
     let currentEditingId = null;
     let tempSelectedColor = '';
     
@@ -324,7 +324,7 @@
     updateClock();
 
     function saveToStorage() {
-      localStorage.setItem('tokimemo_records', JSON.stringify(records));
+      localStorage.setItem('TCS_records', JSON.stringify(records));
       renderList();
     }
 
