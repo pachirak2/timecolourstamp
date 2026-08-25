@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>時めも</title>
+  <!-- PWA設定 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="時めも">
+  <style>
+    :root {
+      --bg-color: #f2f2f7;
+      --card-bg: #ffffff;
+      --text-main: #000000;
+      --text-sub: #8e8e93;
+      --border-color: #e5e5ea;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    header {
+      background: var(--card-bg);
+      padding: 20px 16px 10px 16px;
+      text-align: center;
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .clock {
+      font-size: 3rem;
+      font-weight: bold;
+      font-variant-numeric: tabular-nums;
+      margin: 0;
+    }
+    .date-display {
+      font-size: 1.1rem;
+      color: var(--text-sub);
+      margin-top: 4px;
+    }
+    .btn-container {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 16px;
+      padding-bottom: 8px;
+    }
+    .stamp-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,0,0,0.1);
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+      outline: none;
+      transition: transform 0.1s;
+    }
+    .stamp-btn:active {
+      transform: scale(0.9);
+    }
+    .btn-red { background-color: #ff3b30; }
+    .btn-orange { background-color: #ff9500; }
+    .btn-green { background-color: #34c759; }
+    .btn-gray { background-color: #8e8e93; }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .tool-btn {
+      background: none;
+      border: none;
+      color: #007aff;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .list-container {
+      padding: 0 0 40px 0;
+    }
+    .date-header {
+      padding: 12px 16px 6px 16px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: var(--text-sub);
+    }
+    .record-item {
+      display: flex;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      gap: 12px;
+    }
+    .record-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .record-time {
+      font-size: 1.1rem;
+      width: 80px;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .record-memo {
+      flex: 1;
+      font-size: 0.95rem;
+      color: var(--text-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .record-elapsed {
+      font-size: 0.9rem;
+      color: var(--text-sub);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+
+    /* モーダル */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4);
+      z-index: 100;
+      justify-content: center;
+      align-items: flex-end;
+    }
+    .modal-content {
+      background: var(--card-bg);
+      width: 100%;
+      max-width: 500px;
+      border-radius: 16px 16px 0 0;
+      padding: 20px;
+      box-sizing: border-box;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    textarea {
+      width: 100%;
+      height: 120px;
+      box-sizing: border-box;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 1rem;
+      resize: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="clock" id="clock">00:00:00</div>
+    <div class="date-display" id="dateDisplay">----年--月--日</div>
+    <div class="btn-container">
+      <button class="stamp-btn btn-red" onclick="addRecord('red')"></button>
+      <button class="stamp-btn btn-orange" onclick="addRecord('orange')"></button>
+      <button class="stamp-btn btn-green" onclick="addRecord('green')"></button>
+      <button class="stamp-btn btn-gray" onclick="addRecord('gray')"></button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="tool-btn" onclick="openExportModal()">出力</button>
+    <button class="tool-btn" style="color:#ff3b30;" onclick="clearAllRecords()">全削除</button>
+  </div>
+
+  <div class="list-container" id="listContainer"></div>
+
+  <!-- 詳細・メモ入力モーダル -->
+  <div class="modal" id="detailModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="margin:0;">詳細メモ</h3>
+        <button class="tool-btn" onclick="saveMemo()">完了</button>
+      </div>
+      <p id="modalTimeText" style="color:var(--text-sub); margin-top:0;"></p>
+      <textarea id="memoInput" placeholder="メモを入力..."></textarea>
+      <div style="margin-top: 16px; text-align: right;">
+        <button class="tool-btn" style="color:#ff3b30;" onclick="deleteCurrentRecord()">この記録を削除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 出力モーダル -->
+  <div class="modal" id="exportModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="margin:0;">CSV / テキスト出力</h3>
+        <button class="tool-btn" onclick="closeExportModal()">閉じる</button>
+      </div>
+      <textarea id="exportArea" readonly style="height: 200px; font-family: monospace;"></textarea>
+      <div style="margin-top: 12px;">
+        <button class="tool-btn" style="width:100%; padding:10px; background:#007aff; color:#fff; border-radius:8px;" onclick="copyExportText()">テキストをコピー</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // データの読み込み
+    let records = JSON.parse(localStorage.getItem('tokimemo_records') || '[]');
+    let currentEditingId = null;
+
+    // 時計の更新
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+      const days = ['日', '月', '火', '水', '木', '金', '土'];
+      const dateStr = `${now.getFullYear()}年${('0'+(now.getMonth()+1)).slice(-2)}月${('0'+now.getDate()).slice(-2)}日 (${days[now.getDay()]})`;
+      document.getElementById('dateDisplay').textContent = dateStr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 記録の保存
+    function saveToStorage() {
+      localStorage.setItem('tokimemo_records', JSON.stringify(records));
+      renderList();
+    }
+
+    // スタンプ追加
+    function addRecord(color) {
+      const newRec = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        color: color,
+        memo: ''
+      };
+      records.unshift(newRec);
+      saveToStorage();
+    }
+
+    // リスト描画（日別グループ化＆経過時間）
+    function renderList() {
+      const container = document.getElementById('listContainer');
+      container.innerHTML = '';
+
+      const grouped = {};
+      const days = ['日', '月', '火', '水', '木', '金', '土'];
+
+      records.forEach((rec, idx) => {
+        const d = new Date(rec.timestamp);
+        const dayKey = `${d.getFullYear()}年${('0'+(d.getMonth()+1)).slice(-2)}月${('0'+d.getDate()).slice(-2)}日 (${days[d.getDay()]})`;
+        if (!grouped[dayKey]) grouped[dayKey] = [];
+        grouped[dayKey].push({ rec, globalIdx: idx });
+      });
+
+      for (const [dayKey, items] of Object.entries(grouped)) {
+        const header = document.createElement('div');
+        header.className = 'date-header';
+        header.textContent = dayKey;
+        container.appendChild(header);
+
+        items.forEach(({ rec, globalIdx }) => {
+          const itemEl = document.createElement('div');
+          itemEl.className = 'record-item';
+          itemEl.onclick = () => openDetailModal(rec.id);
+
+          const dot = document.createElement('div');
+          dot.className = `record-dot btn-${rec.color}`;
+
+          const timeEl = document.createElement('div');
+          timeEl.className = 'record-time';
+          const d = new Date(rec.timestamp);
+          timeEl.textContent = d.toTimeString().split(' ')[0].substring(0, 5);
+
+          const memoEl = document.createElement('div');
+          memoEl.className = 'record-memo';
+          memoEl.textContent = rec.memo || '';
+
+          const elapsedEl = document.createElement('div');
+          elapsedEl.className = 'record-elapsed';
+          
+          // 経過時間計算
+          if (globalIdx + 1 < records.length) {
+            const diffSec = Math.floor((rec.timestamp - records[globalIdx + 1].timestamp) / 1000);
+            const hh = String(Math.floor(diffSec / 3600)).padStart(2, '0');
+            const mm = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
+            const ss = String(diffSec % 60).padStart(2, '0');
+            elapsedEl.textContent = `+${hh}:${mm}:${ss}`;
+          } else {
+            elapsedEl.textContent = '開始';
+          }
+
+          itemEl.appendChild(dot);
+          itemEl.appendChild(timeEl);
+          itemEl.appendChild(memoEl);
+          itemEl.appendChild(elapsedEl);
+          container.appendChild(itemEl);
+        });
+      }
+    }
+
+    // 詳細モーダル操作
+    function openDetailModal(id) {
+      currentEditingId = id;
+      const rec = records.find(r => r.id === id);
+      if (!rec) return;
+      const d = new Date(rec.timestamp);
+      document.getElementById('modalTimeText').textContent = `${d.toLocaleString('ja-JP')} 記録`;
+      document.getElementById('memoInput').value = rec.memo || '';
+      document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    function saveMemo() {
+      const rec = records.find(r => r.id === currentEditingId);
+      if (rec) {
+        rec.memo = document.getElementById('memoInput').value;
+        saveToStorage();
+      }
+      document.getElementById('detailModal').style.display = 'none';
+    }
+
+    function deleteCurrentRecord() {
+      if (confirm('この記録を削除しますか？')) {
+        records = records.filter(r => r.id !== currentEditingId);
+        saveToStorage();
+        document.getElementById('detailModal').style.display = 'none';
+      }
+    }
+
+    function clearAllRecords() {
+      if (confirm('すべての記録を削除しますか？この操作は元に戻せません。')) {
+        records = [];
+        saveToStorage();
+      }
+    }
+
+    // 出力モーダル操作
+    function openExportModal() {
+      const days = ['日', '月', '火', '水', '木', '金', '土'];
+      const colorMap = { red: 'R', orange: 'O', green: 'G', gray: 'N' };
+      let text = '';
+      records.forEach(r => {
+        const d = new Date(r.timestamp);
+        const y = d.getFullYear();
+        const m = ('0'+(d.getMonth()+1)).slice(-2);
+        const date = ('0'+d.getDate()).slice(-2);
+        const day = days[d.getDay()];
+        const time = d.toTimeString().split(' ')[0];
+        const c = colorMap[r.color] || '-';
+        text += `[${y}/${m}/${date}(${day}) ${time}](${c})\n`;
+        if (r.memo) text += `  Memo: ${r.memo}\n`;
+      });
+      document.getElementById('exportArea').value = text;
+      document.getElementById('exportModal').style.display = 'flex';
+    }
+
+    function closeExportModal() {
+      document.getElementById('exportModal').style.display = 'none';
+    }
+
+    function copyExportText() {
+      const area = document.getElementById('exportArea');
+      area.select();
+      navigator.clipboard.writeText(area.value);
+      alert('クリップボードにコピーしました');
+    }
+
+    renderList();
+  </script>
+</body>
+</html>
