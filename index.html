@@ -331,14 +331,17 @@
       renderList();
     }
 
-    function addRecord(color) {
+function addRecord(color) {
+      // 最初の1件目、または「灰色（gray）」ボタンが押された場合に開始基準をオンにする
       const isFirst = records.length === 0;
+      const isGrayStart = (color === 'gray');
+
       const newRec = {
         id: Date.now().toString(),
         timestamp: Date.now(),
         color: color,
         memo: '',
-        isStart: isFirst
+        isStart: isFirst || isGrayStart
       };
       records.unshift(newRec);
       saveToStorage();
